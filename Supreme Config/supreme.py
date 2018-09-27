@@ -36,6 +36,7 @@ class Config:
     email = c.get('cardInfo', 'email')
     phone = c.get('cardInfo', 'phone')
     streetAddress = c.get('cardInfo', 'address')
+    streetAddress2 = c.get('cardInfo', 'address2')
     zipCode = c.get('cardInfo', 'zip')
     shippingCity = c.get('cardInfo', 'city')
     shippingState = c.get('cardInfo', 'state')
@@ -49,6 +50,7 @@ class Config:
 
 class SupremeProduct:
     def __init__(self, item_name, item_color, item_size, item_quantity, thread_color, local_chromedriver_file):
+        self.need_confirmation = False
         self.item_name = item_name
         self.item_color = item_color
         self.item_size = item_size
@@ -80,22 +82,47 @@ class SupremeProduct:
     def find_product_variant(self, product_name, product_id):
         sys.stdout.write(f'[[ {self.thread_text_color}{str(threading.current_thread().getName())}{COLOR_END} ]] {utc_to_est()} :: Selecting [[{self.thread_text_color}{product_name}{COLOR_END}]] ( {str(product_id)} )\n')
         product_info = self.get_product_information(product_id)
-        for listed_product_colors in product_info['styles']:
-            if self.item_color.lower() in listed_product_colors['name'].lower():
+
+        for listed_product_color in product_info['styles']:
+            if self.item_color.lower() in listed_product_color['name'].lower():
                 self.product_color_found = 1
-                product_color_specific_id = listed_product_colors['id']
-                for size in listed_product_colors['sizes']:
-                    if self.item_size.lower() == size['name'].lower():
-                        self.product_size_found = 1
-                        product_size_color_specific_id = size['id']
-                        sys.stdout.write(f'[[ {self.thread_text_color}{str(threading.current_thread().getName())}{COLOR_END} ]] {utc_to_est()} :: Selecting size for [[ {self.thread_text_color}{product_name}{COLOR_END} ]] - {self.item_size} ( {self.item_color} )  ( {str(product_size_color_specific_id)} )\n')
-                if self.product_size_found != 1:
-                    # Add functionality to add default size on matching color product
-                    pass
+                product_color_specific_id = listed_product_color['id']
+                product_color = listed_product_color
+                break
+
         if self.product_color_found != 1:
             # Add functionality to add default color AND size on matching product model
+            self.need_confirmation = True
+            if len(product_info['styles']) > 0:
+                self.product_color_found = 1
+                product_color = product_info['styles'][0]
+                product_color_specific_id = product_color['id']
+                print('Can not find the color in config, using first color as default: {}'.format(product_color['name']))
+
+        if self.product_color_found == 1:
+            for size in product_color['sizes']:
+                if self.item_size.lower() == size['name'].lower():
+                    self.product_size_found = 1
+                    product_size_color_specific_id = size['id']
+                    sys.stdout.write(f'[[ {self.thread_text_color}{str(threading.current_thread().getName())}{COLOR_END} ]] {utc_to_est()} :: Selecting size for [[ {self.thread_text_color}{product_name}{COLOR_END} ]] - {self.item_size} ( {self.item_color} )  ( {str(product_size_color_specific_id)} )\n')
+                    break
+
+            if self.product_size_found != 1:
+                # Add functionality to add default size on matching color product
+                self.need_confirmation = True
+                if len(product_color['sizes']) > 0:
+                    self.product_size_found = 1
+                    product_size = product_color['sizes'][0]
+                    product_size_color_specific_id = product_size['id']
+                    print('Can not find the color in config, using first color as default: {}'.format(product_size['name']))
+
+        if self.product_color_found == 1 and self.product_size_found == 1:
+            return product_color_specific_id, product_size_color_specific_id
+        else:
+            print('Cannot find correct item')
             pass
-        return product_color_specific_id, product_size_color_specific_id
+            
+
 
     def show_cookies(self, response):
         cookie_dict_wrapper = []
@@ -118,11 +145,11 @@ class SupremeProduct:
     def checkout(self, webdriver_instance):
         webdriver_instance.get('https://www.supremenewyork.com/checkout')
         try:
-            #customer_name = webdriver_instance.find_element_by_name('order[billing_name]')
+            # customer_name = webdriver_instance.find_element_by_name('order[billing_name]')
             webdriver_instance.execute_script('document.getElementById(\'order_billing_name\').value = ""')
-            #customer_name.clear()
+            # customer_name.clear()
             webdriver_instance.execute_script('document.getElementById(\'order_billing_name\').value = "{}"'.format(user_config.billingName))
-            #customer_name.send_keys(user_config.billingName)
+            # customer_name.send_keys(user_config.billingName)
         except:
             print('Couldn\'t find order billing name field')
             input('Click to continue automation...')
@@ -150,6 +177,15 @@ class SupremeProduct:
             #customer_address.send_keys(user_config.streetAddress)
         except:
             print('Couldn\'t find order[billing_address] field (address)')
+            input('Click to continue automation...')
+        try:
+            # webdriver_instance.execute_script('document.getElementById(\'order_billing_address_2\').value = ""')
+            # webdriver_instance.execute_script('document.getElementById(\'order_billing_address_2\').value = "{}"'.format(user_config.streetAddress2))
+            customer_address2 = webdriver_instance.find_element_by_name('order[billing_address_2]')
+            customer_address2.clear()
+            customer_address2.send_keys(user_config.streetAddress2)
+        except:
+            print('Couldn\'t find order_billing_address_2 field (address)')
             input('Click to continue automation...')
         try:
             #customer_zip = webdriver_instance.find_element_by_name('order[billing_zip]')
@@ -219,14 +255,16 @@ class SupremeProduct:
             print('Couldn\'t find accept terms radio button')
             input('Click to continue automation...')
 
-        input('NEXT STEP IS TO CHECKOUT')
+        if self.need_confirmation:
+            print('Need to confirm')
+            input('NEXT STEP IS TO CHECKOUT')
         """Stubbed for safety"""
-        # try:
-        #     checkout_button = webdriver_instance.find_element_by_css_selector('#pay > input')
-        #     checkout_button.click()
-        # except:
-        #     print('Couldn\'t find process/pay/checkout button')
-        #     input('Click to continue automation...')
+        try:
+            checkout_button = webdriver_instance.find_element_by_css_selector('#pay > input')
+            checkout_button.click()
+        except:
+            print('Couldn\'t find process/pay/checkout button')
+            input('Click to continue automation...')
 
     def start_webdriver(self, response):
         #driver = webdriver.Chrome(f'{os.getcwd()}/chromedriver')  # chromedriver bin must be in folder of invocation -implement check
@@ -252,12 +290,12 @@ class SupremeProduct:
             'Accept-Encoding':   'gzip, deflate',
             'Accept-Language':   'en-us',
             'Content-Type':      'application/x-www-form-urlencoded',
-            'Origin':            'http://www.supremenewyork.com',
+            'Origin':            'https://www.supremenewyork.com',
             'Connection':        'keep-alive',
             'User-Agent':        'Mozilla/5.0 (iPhone; CPU iPhone OS 10_2 like Mac OS X) AppleWebKit/602.3.12 (KHTML, like Gecko) Mobile/14C92',
             'Referer':           'http://www.supremenewyork.com/mobile'
         }
-        atc_response = requests.request('POST', f'http://www.supremenewyork.com/shop/{product_base_id}/add.json', data=add_payload, headers=headers)
+        atc_response = requests.request('POST', f'https://www.supremenewyork.com/shop/{product_base_id}/add.json', data=add_payload, headers=headers)
 
         if atc_response.status_code != 200:  # DID ITEM ADD TO CART - wait/sleep and make POST again
             sys.stdout.write(f'[[ {self.thread_text_color}{str(threading.current_thread().getName())}{COLOR_END} ]] {utc_to_est()} :: {str(atc_response.status_code)} Error [[ {self.thread_text_color}{listed_product_name}{COLOR_END} ]] {FAIL}FAILED!{COLOR_END}\n')
@@ -337,7 +375,7 @@ if __name__ == '__main__':
         chromedriver_executable_file = cdg.unzip()
         cdg.clean_up()
     else:
-        chromedriver_executable_file = glob.glob('chromedriver*')[0]  # assume there is only one filename match
+        chromedriver_executable_file = glob.glob('./chromedriver*')[0]  # assume there is only one filename match
     user_config = Config()
     assert len(user_config.productNames) == len(user_config.productColors) == len(user_config.productSizes) == len(user_config.productQuantities), 'Assertion Error: Product section lengths unmatched'
     for supreme_product_index in  range(0, len(user_config.productNames)):
