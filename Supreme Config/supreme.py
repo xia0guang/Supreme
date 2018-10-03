@@ -114,7 +114,7 @@ class SupremeProduct:
                     self.product_size_found = 1
                     product_size = product_color['sizes'][0]
                     product_size_color_specific_id = product_size['id']
-                    print('Can not find the color in config, using first color as default: {}'.format(product_size['name']))
+                    print('Can not find the size in config, using first color as default: {}'.format(product_size['name']))
 
         if self.product_color_found == 1 and self.product_size_found == 1:
             return product_color_specific_id, product_size_color_specific_id
